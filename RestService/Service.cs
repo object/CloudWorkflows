@@ -3,6 +3,7 @@ using System.Activities;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Linq;
+using System.Net;
 using System.ServiceModel;
 using System.ServiceModel.Activation;
 using System.ServiceModel.Web;
@@ -48,9 +49,19 @@ namespace RestService
         [OperationContract(Name = "PersistentAccumulateStartSession")]
         public string PersistentAccumulate()
         {
-            var session = new PersistentAccumulatorSession();
-            session.Run();
-            return session.Application.Id.ToString();
+            try
+            {
+                var session = new PersistentAccumulatorSession();
+                session.Run();
+                return session.Application.Id.ToString();
+            }
+            catch (Exception exception)
+            {
+                OutgoingWebResponseContext response = WebOperationContext.Current.OutgoingResponse;
+                response.StatusCode = HttpStatusCode.Forbidden;
+                response.StatusDescription = exception.Message;
+                return exception.Message;
+            }
         }
 
         [WebGet(UriTemplate = "/paccumulate/{sessionId}/{number}")]
