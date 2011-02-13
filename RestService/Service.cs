@@ -35,7 +35,7 @@ namespace RestService
             if (!AccumulatorSession.Sessions.ContainsKey(sessionId))
             {
                 session = new AccumulatorSession(sessionId);
-                session.Run();
+                session.Start();
             }
 
             session = AccumulatorSession.Sessions[sessionId];
@@ -52,7 +52,7 @@ namespace RestService
             try
             {
                 var session = new PersistentAccumulatorSession();
-                session.Run();
+                session.Start();
                 return session.Application.Id.ToString();
             }
             catch (Exception exception)
@@ -68,7 +68,7 @@ namespace RestService
         public int PersistentAccumulate(string sessionId, string number)
         {
             var session = new PersistentAccumulatorSession(sessionId);
-            session.Run(int.Parse(number));
+            session.Resume(int.Parse(number));
             return session.Completed ? 0 : session.Sum;
         }
     }

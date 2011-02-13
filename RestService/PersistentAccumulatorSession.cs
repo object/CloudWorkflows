@@ -12,13 +12,14 @@ using ActivityLibrary;
 
 namespace RestService
 {
-    public class PersistentAccumulatorSession
+    public class PersistentAccumulatorSession : IDisposable
     {
         public string SessionId { get; private set; }
         public WorkflowApplication Application { get; private set; }
         public AutoResetEvent SyncEvent { get; private set; }
         public int Sum { get; set; }
         public bool Completed { get; set; }
+        private bool Suspended { get; set; }
 
         public PersistentAccumulatorSession(string sessionId = null)
         {
@@ -27,15 +28,42 @@ namespace RestService
             this.SyncEvent = new AutoResetEvent(false);
             this.Sum = 0;
             this.Completed = false;
+            this.Suspended = false;
         }
 
-        public void Run()
+        public void Dispose()
+        {
+            Stop();
+            this.SyncEvent.Dispose();
+        }
+
+        public void Start()
         {
             this.Application.Run();
         }
 
-        public void Run(int number)
+        public void Stop()
         {
+            if (!this.Completed)
+            {
+                this.Application.Cancel();
+                this.Completed = true;
+            }
+        }
+
+        public void Suspend()
+        {
+            this.Application.Persist();
+            this.SyncEvent.WaitOne();
+        }
+
+        public void Resume(int number)
+        {
+            if (this.Suspended)
+            {
+                this.Application = CreateWorkflowApplication(new AccumulatorActivity(), CreateInstanceStore());
+            }
+
             this.Application.Load(new Guid(this.SessionId));
             this.Application.ResumeBookmark("GetNumber", number);
             this.SyncEvent.WaitOne();
@@ -47,22 +75,28 @@ namespace RestService
             this.SyncEvent.Set();
         }
 
-        private WorkflowApplication CreateWorkflowApplication(AccumulatorActivity activity, InstanceStore instanceStore)
+        internal WorkflowApplication CreateWorkflowApplication(AccumulatorActivity activity, InstanceStore instanceStore)
         {
             var application = new WorkflowApplication(activity);
             application.InstanceStore = instanceStore;
+            application.Unloaded = new Action<WorkflowApplicationEventArgs>((e) =>
+                {
+                    this.Suspended = true;
+                    this.SyncEvent.Set();
+                });
             application.Completed = new Action<WorkflowApplicationCompletedEventArgs>((e) =>
-            {
-                this.Sum = (int)e.Outputs["Sum"];
-                this.Completed = true;
-                this.SyncEvent.Set();
-            });
+                {
+                    this.Sum = (int)e.Outputs["Sum"];
+                    this.Completed = true;
+                    this.SyncEvent.Set();
+                });
             application.PersistableIdle = new Func<WorkflowApplicationIdleEventArgs, PersistableIdleAction>((e) => PersistableIdleAction.Unload);
             application.Extensions.Add(new Notification(NotifySum));
+            this.Suspended = false;
             return application;
         }
 
-        private InstanceStore CreateInstanceStore()
+        internal static InstanceStore CreateInstanceStore()
         {
             string connectionString = ConfigurationManager.ConnectionStrings["InstanceStore"].ConnectionString;
             var instanceStore = new SqlWorkflowInstanceStore(connectionString);

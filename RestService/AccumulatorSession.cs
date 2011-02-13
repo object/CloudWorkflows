@@ -27,7 +27,7 @@ namespace RestService
             this.Sum = 0;
         }
 
-        public void Run()
+        public void Start()
         {
             this.Application.Completed = new Action<WorkflowApplicationCompletedEventArgs>((e) =>
             {
